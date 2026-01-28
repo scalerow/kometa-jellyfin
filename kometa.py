@@ -9,7 +9,7 @@ if sys.version_info[0] != 3 or sys.version_info[1] < 9:
     sys.exit(0)
 
 try:
-    import arrapi, lxml, pathvalidate, PIL, plexapi, psutil, dateutil, requests, ruamel.yaml, schedule, setuptools, tmdbapis
+    import arrapi, lxml, pathvalidate, PIL, jellyfin_apiclient_python, plexapi, psutil, dateutil, requests, ruamel.yaml, schedule, setuptools, tmdbapis
     from dotenv import load_dotenv, version as dotenv_version
     from PIL import ImageFile
     from plexapi import server

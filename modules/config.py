@@ -18,7 +18,6 @@ from modules.gotify import Gotify
 from modules.ntfy import Ntfy
 from modules.omdb import OMDb
 from modules.overlays import Overlays
-from modules.plex import Plex
 from modules.radarr import Radarr
 from modules.sonarr import Sonarr
 from modules.reciperr import Reciperr
@@ -29,6 +28,8 @@ from modules.trakt import Trakt
 from modules.tvdb import TVDb
 from modules.util import Failed, NotScheduled, NotScheduledRange
 from modules.webhooks import Webhooks
+from modules.jellyfin import Jellyfin
+from modules.plex import Plex
 
 logger = util.logger
 
@@ -94,12 +95,12 @@ mass_available_options = {
     "anidb": "Use AniDB Release", "mal": "Use MyAnimeList Release"
 }
 mass_image_options = {
-    "lock": "Lock Image", "unlock": "Unlock Image", "plex": "Use Plex Images", "tmdb": "Use TMDb Images"
+    "lock": "Lock Image", "unlock": "Unlock Image", "jellyfin": "Use Jellyfin Images", "tmdb": "Use TMDb Images"
 }
 mass_episode_rating_options = {
     "lock": "Lock Rating", "unlock": "Unlock Rating", "remove": "Remove and Lock Rating", "reset": "Remove and Unlock Rating",
-    "plex_tmdb": "Use TMDB Rating through Plex",
-    "plex_imdb": "Use IMDB Rating through Plex",
+    "jellyfin_tmdb": "Use TMDB Rating through Jellyfin",
+    "jellyfin_imdb": "Use IMDB Rating through Jellyfin",
     "tmdb": "Use TMDb Rating",
     "imdb": "Use IMDb Rating",
     "trakt": "Use Trakt Rating"
@@ -116,10 +117,10 @@ mass_rating_options = {
     "omdb": "Use IMDb Rating through OMDb",
     "omdb_metascore": "Use Metacritic Metascore through OMDb",
     "omdb_tomatoes": "Use Rotten Tomatoes Rating through OMDb",
-    "plex_imdb": "Use IMDB Rating through Plex",
-    "plex_tmdb": "Use TMDB Rating through Plex",
-    "plex_tomatoes": "Use Rotten Tomatoes Rating through Plex",
-    "plex_tomatoesaudience": "Use Rotten Tomatoes Audience Rating through Plex",
+    "jellyfin_imdb": "Use IMDB Rating through Jellyfin",
+    "jellyfin_tmdb": "Use TMDB Rating through Jellyfin",
+    "jellyfin_tomatoes": "Use Rotten Tomatoes Rating through Jellyfin",
+    "jellyfin_tomatoesaudience": "Use Rotten Tomatoes Audience Rating through Jellyfin",
     "mdb": "Use MDBList Score",
     "mdb_average": "Use MDBList Average Score",
     "mdb_imdb": "Use IMDb Rating through MDBList",
@@ -136,7 +137,7 @@ mass_rating_options = {
     "anidb_score": "Use AniDB Review Dcore",
     "mal": "Use MyAnimeList Rating"
 }
-reset_overlay_options = {"tmdb": "Reset to TMDb poster", "plex": "Reset to Plex Poster"}
+reset_overlay_options = {"tmdb": "Reset to TMDb poster", "jellyfin": "Reset to Jellyfin Poster"}
 library_operations = {
     "assets_for_all": "bool", "assets_for_all_collections": "bool", "split_duplicates": "bool", "update_blank_track_titles": "bool", "remove_title_parentheses": "bool",
     "radarr_add_all_existing": "bool", "radarr_remove_by_tag": "str", "sonarr_add_all_existing": "bool", "sonarr_remove_by_tag": "str",
@@ -149,7 +150,7 @@ library_operations = {
     "mass_originally_available_update": mass_available_options, "mass_added_at_update": mass_available_options,
     "mass_collection_mode": "mass_collection_mode", "mass_poster_update": "dict", "mass_background_update": "dict",
     "metadata_backup": "dict", "delete_collections": "dict", "genre_mapper": "dict", "content_rating_mapper": "dict",
-    "plex_bulk_edit_batch_size": "int",
+    "jellyfin_bulk_edit_batch_size": "int",
 }
 
 class ConfigFile:
@@ -195,8 +196,8 @@ class ConfigFile:
         self.metadata_only = attrs["metadata_only"] if "metadata_only" in attrs else False
         self.operations_only = attrs["operations_only"] if "operations_only" in attrs else False
         self.overlays_only = attrs["overlays_only"] if "overlays_only" in attrs else False
-        self.env_plex_url = attrs["plex_url"] if "plex_url" in attrs else ""
-        self.env_plex_token = attrs["plex_token"] if "plex_token" in attrs else ""
+        self.env_jellyfin_url = attrs["jellyfin_url"] if "jellyfin_url" in attrs else ""
+        self.env_jellyfin_token = attrs["jellyfin_token"] if "jellyfin_token" in attrs else ""
         self.tpdb_timer = None
         current_time = datetime.now()
 
@@ -224,13 +225,13 @@ class ConfigFile:
         replace_attr(self.data, "cache_expiration", "cache")
         if "config" in self.data:
             del self.data["cache"]
-        replace_attr(self.data, "asset_directory", "plex")
-        replace_attr(self.data, "sync_mode", "plex")
-        replace_attr(self.data, "show_unmanaged", "plex")
-        replace_attr(self.data, "show_filtered", "plex")
-        replace_attr(self.data, "show_unfiltered", "plex")
-        replace_attr(self.data, "show_missing", "plex")
-        replace_attr(self.data, "save_missing", "plex")
+        replace_attr(self.data, "asset_directory", "jellyfin")
+        replace_attr(self.data, "sync_mode", "jellyfin")
+        replace_attr(self.data, "show_unmanaged", "jellyfin")
+        replace_attr(self.data, "show_filtered", "jellyfin")
+        replace_attr(self.data, "show_unfiltered", "jellyfin")
+        replace_attr(self.data, "show_missing", "jellyfin")
+        replace_attr(self.data, "save_missing", "jellyfin")
         if self.data["libraries"]:
             for library in self.data["libraries"]:
 
@@ -266,14 +267,14 @@ class ConfigFile:
                     self.data["libraries"][library]["radarr_add_all_existing"] = self.data["libraries"][library].pop("radarr_add_all")
                 if "sonarr_add_all" in self.data["libraries"][library]:
                     self.data["libraries"][library]["sonarr_add_all_existing"] = self.data["libraries"][library].pop("sonarr_add_all")
-                if "plex" in self.data["libraries"][library] and self.data["libraries"][library]["plex"]:
-                    replace_attr(self.data["libraries"][library], "asset_directory", "plex")
-                    replace_attr(self.data["libraries"][library], "sync_mode", "plex")
-                    replace_attr(self.data["libraries"][library], "show_unmanaged", "plex")
-                    replace_attr(self.data["libraries"][library], "show_filtered", "plex")
-                    replace_attr(self.data["libraries"][library], "show_unfiltered", "plex")
-                    replace_attr(self.data["libraries"][library], "show_missing", "plex")
-                    replace_attr(self.data["libraries"][library], "save_missing", "plex")
+                if "jellyfin" in self.data["libraries"][library] and self.data["libraries"][library]["jellyfin"]:
+                    replace_attr(self.data["libraries"][library], "asset_directory", "jellyfin")
+                    replace_attr(self.data["libraries"][library], "sync_mode", "jellyfin")
+                    replace_attr(self.data["libraries"][library], "show_unmanaged", "jellyfin")
+                    replace_attr(self.data["libraries"][library], "show_filtered", "jellyfin")
+                    replace_attr(self.data["libraries"][library], "show_unfiltered", "jellyfin")
+                    replace_attr(self.data["libraries"][library], "show_missing", "jellyfin")
+                    replace_attr(self.data["libraries"][library], "save_missing", "jellyfin")
                 if "settings" in self.data["libraries"][library] and self.data["libraries"][library]["settings"]:
                     if "collection_minimum" in self.data["libraries"][library]["settings"]:
                         self.data["libraries"][library]["settings"]["minimum_items"] = self.data["libraries"][library]["settings"].pop("collection_minimum")
@@ -334,7 +335,7 @@ class ConfigFile:
                 temp["changes"] = None if not changes else changes if len(changes) > 1 else changes[0]
             self.data["webhooks"] = temp
         if "github" in self.data:                      self.data["github"] = self.data.pop("github")
-        if "plex" in self.data:                        self.data["plex"] = self.data.pop("plex")
+        if "jellyfin" in self.data:                        self.data["jellyfin"] = self.data.pop("jellyfin")
         if "tmdb" in self.data:                        self.data["tmdb"] = self.data.pop("tmdb")
         if "tautulli" in self.data:                    self.data["tautulli"] = self.data.pop("tautulli")
         if "omdb" in self.data:                        self.data["omdb"] = self.data.pop("omdb")
@@ -810,23 +811,23 @@ class ConfigFile:
 
             logger.separator()
 
-            logger.info("Connecting to Plex Libraries...")
+            logger.info("Connecting to Jellyfn Libraries...")
 
-            self.general["plex"] = {
-                "url": check_for_attribute(self.data, "url", parent="plex", var_type="url", default_is_none=True),
-                "token": check_for_attribute(self.data, "token", parent="plex", default_is_none=True),
-                "timeout": check_for_attribute(self.data, "timeout", parent="plex", var_type="int", default=60),
-                "verify_ssl": check_for_attribute(self.data, "verify_ssl", parent="plex", var_type="bool", default_is_none=True),
-                "db_cache": check_for_attribute(self.data, "db_cache", parent="plex", var_type="int", default_is_none=True)
+            self.general["jellyfin"] = {
+                "url": check_for_attribute(self.data, "url", parent="jellyfin", var_type="url", default_is_none=True),
+                "token": check_for_attribute(self.data, "token", parent="jellyfin", default_is_none=True),
+                "timeout": check_for_attribute(self.data, "timeout", parent="jellyfin", var_type="int", default=60),
+                "verify_ssl": check_for_attribute(self.data, "verify_ssl", parent="jellyfin", var_type="bool", default_is_none=True),
+                "db_cache": check_for_attribute(self.data, "db_cache", parent="jellyfin", var_type="int", default_is_none=True)
             }
             for attr in ["clean_bundles", "empty_trash", "optimize"]:
                 try:
-                    self.general["plex"][attr] = check_for_attribute(self.data, attr, parent="plex", var_type="bool", default=False, throw=True)
+                    self.general["jellyfin"][attr] = check_for_attribute(self.data, attr, parent="jellyfin", var_type="bool", default=False, throw=True)
                 except Failed as e:
-                    if "plex" in self.data and attr in self.data["plex"] and self.data["plex"][attr]:
-                        self.general["plex"][attr] = self.data["plex"][attr]
+                    if "jellyfin" in self.data and attr in self.data["jellyfin"] and self.data["jellyfin"][attr]:
+                        self.general["jellyfin"][attr] = self.data["jellyfin"][attr]
                     else:
-                        self.general["plex"][attr] = False
+                        self.general["jellyfin"][attr] = False
                         logger.warning(str(e).replace("Error", "Warning"))
             self.general["radarr"] = {
                 "url": check_for_attribute(self.data, "url", parent="radarr", var_type="url", default_is_none=True),
@@ -843,7 +844,7 @@ class ConfigFile:
                 "tag": check_for_attribute(self.data, "tag", parent="radarr", var_type="lower_list", default_is_none=True),
                 "search": check_for_attribute(self.data, "search", parent="radarr", var_type="bool", default=False),
                 "radarr_path": check_for_attribute(self.data, "radarr_path", parent="radarr", default_is_none=True),
-                "plex_path": check_for_attribute(self.data, "plex_path", parent="radarr", default_is_none=True)
+                "jellyfin_path": check_for_attribute(self.data, "jellyfin_path", parent="radarr", default_is_none=True)
             }
             self.general["sonarr"] = {
                 "url": check_for_attribute(self.data, "url", parent="sonarr", var_type="url", default_is_none=True),
@@ -863,7 +864,7 @@ class ConfigFile:
                 "search": check_for_attribute(self.data, "search", parent="sonarr", var_type="bool", default=False),
                 "cutoff_search": check_for_attribute(self.data, "cutoff_search", parent="sonarr", var_type="bool", default=False),
                 "sonarr_path": check_for_attribute(self.data, "sonarr_path", parent="sonarr", default_is_none=True),
-                "plex_path": check_for_attribute(self.data, "plex_path", parent="sonarr", default_is_none=True)
+                "jellyfin_path": check_for_attribute(self.data, "jellyfin_path", parent="sonarr", default_is_none=True)
             }
             self.general["tautulli"] = {
                 "url": check_for_attribute(self.data, "url", parent="tautulli", var_type="url", default_is_none=True),
@@ -1211,34 +1212,34 @@ class ConfigFile:
 
                 try:
                     logger.info("")
-                    logger.separator("Plex Configuration", space=False, border=False)
-                    params["plex"] = {
-                        "url": check_for_attribute(lib, "url", parent="plex", var_type="url", default=self.general["plex"]["url"], req_default=True, save=False),
-                        "token": check_for_attribute(lib, "token", parent="plex", default=self.general["plex"]["token"], req_default=True, save=False),
-                        "timeout": check_for_attribute(lib, "timeout", parent="plex", var_type="int", default=self.general["plex"]["timeout"], save=False),
-                        "verify_ssl": check_for_attribute(lib, "verify_ssl", parent="plex", var_type="bool", default=self.general["plex"]["verify_ssl"], default_is_none=True, save=False),
-                        "db_cache": check_for_attribute(lib, "db_cache", parent="plex", var_type="int", default=self.general["plex"]["db_cache"], default_is_none=True, save=False)
+                    logger.separator("Jellyfin Configuration", space=False, border=False)
+                    params["jellyfin"] = {
+                        "url": check_for_attribute(lib, "url", parent="jellyfin", var_type="url", default=self.general["jellyfin"]["url"], req_default=True, save=False),
+                        "token": check_for_attribute(lib, "token", parent="jellyfin", default=self.general["jellyfin"]["token"], req_default=True, save=False),
+                        "timeout": check_for_attribute(lib, "timeout", parent="jellyfin", var_type="int", default=self.general["jellyfin"]["timeout"], save=False),
+                        "verify_ssl": check_for_attribute(lib, "verify_ssl", parent="jellyfin", var_type="bool", default=self.general["jellyfin"]["verify_ssl"], default_is_none=True, save=False),
+                        "db_cache": check_for_attribute(lib, "db_cache", parent="jellyfin", var_type="int", default=self.general["jellyfin"]["db_cache"], default_is_none=True, save=False)
                     }
                     for attr in ["clean_bundles", "empty_trash", "optimize"]:
                         try:
-                            params["plex"][attr] = check_for_attribute(lib, attr, parent="plex", var_type="bool", save=False, throw=True)
+                            params["jellyfin"][attr] = check_for_attribute(lib, attr, parent="jellyfin", var_type="bool", save=False, throw=True)
                         except Failed:
-                            test_attr = lib["plex"][attr] if "plex" in lib and attr in lib["plex"] and lib["plex"][attr] else self.general["plex"][attr]
+                            test_attr = lib["jellyfin"][attr] if "jellyfin" in lib and attr in lib["jellyfin"] and lib["jellyfin"][attr] else self.general["jellyfin"][attr]
                             if test_attr is not True and test_attr is not False:
-                                params["plex"][attr] = False
+                                params["jellyfin"][attr] = False
                                 try:
                                     util.schedule_check(attr, test_attr, current_time, self.run_hour)
-                                    params["plex"][attr] = True
+                                    params["jellyfin"][attr] = True
                                 except NotScheduled:
                                     logger.info(f"Skipping Operation Not Scheduled for {test_attr}")
                             else:
-                                params["plex"][attr] = test_attr
+                                params["jellyfin"][attr] = test_attr
 
-                    if params["plex"]["url"].lower() == "env":
-                        params["plex"]["url"] = self.env_plex_url
-                    if params["plex"]["token"].lower() == "env":
-                        params["plex"]["token"] = self.env_plex_token
-                    library = Plex(self, params)
+                    if params["jellyfin"]["url"].lower() == "env":
+                        params["jellyfin"]["url"] = self.env_jellyfin_url
+                    if params["jellyfin"]["token"].lower() == "env":
+                        params["jellyfin"]["token"] = self.env_jellyfin_token
+                    library = Jellyfin(self, params)
                     logger.info("")
                     logger.info(f"{display_name} Library Connection Successful")
                     logger.info("")
@@ -1275,7 +1276,7 @@ class ConfigFile:
                             "tag": check_for_attribute(lib, "tag", parent="radarr", var_type="lower_list", default=self.general["radarr"]["tag"], default_is_none=True, save=False),
                             "search": check_for_attribute(lib, "search", parent="radarr", var_type="bool", default=self.general["radarr"]["search"], save=False),
                             "radarr_path": check_for_attribute(lib, "radarr_path", parent="radarr", default=self.general["radarr"]["radarr_path"], default_is_none=True, save=False),
-                            "plex_path": check_for_attribute(lib, "plex_path", parent="radarr", default=self.general["radarr"]["plex_path"], default_is_none=True, save=False)
+                            "jellyfin_path": check_for_attribute(lib, "jellyfin_path", parent="radarr", default=self.general["radarr"]["jellyfin_path"], default_is_none=True, save=False)
                         })
                     except Failed as e:
                         logger.stacktrace()
@@ -1308,7 +1309,7 @@ class ConfigFile:
                             "search": check_for_attribute(lib, "search", parent="sonarr", var_type="bool", default=self.general["sonarr"]["search"], save=False),
                             "cutoff_search": check_for_attribute(lib, "cutoff_search", parent="sonarr", var_type="bool", default=self.general["sonarr"]["cutoff_search"], save=False),
                             "sonarr_path": check_for_attribute(lib, "sonarr_path", parent="sonarr", default=self.general["sonarr"]["sonarr_path"], default_is_none=True, save=False),
-                            "plex_path": check_for_attribute(lib, "plex_path", parent="sonarr", default=self.general["sonarr"]["plex_path"], default_is_none=True, save=False)
+                            "jellyfin_path": check_for_attribute(lib, "jellyfin_path", parent="sonarr", default=self.general["sonarr"]["jellyfin_path"], default_is_none=True, save=False)
                         })
                     except Failed as e:
                         logger.stacktrace()
@@ -1344,7 +1345,7 @@ class ConfigFile:
             self.library_map = {_l.original_mapping_name: _l for _l in self.libraries}
 
             if len(self.libraries) > 0:
-                logger.info(f"{len(self.libraries)} Plex Library Connection{'s' if len(self.libraries) > 1 else ''} Successful")
+                logger.info(f"{len(self.libraries)} Jellyfin Library Connection{'s' if len(self.libraries) > 1 else ''} Successful")
             else:
                 raise Failed("Config Error: No libraries were found in config")
 

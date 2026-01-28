@@ -21,6 +21,7 @@ RUN echo "**** install system packages ****" \
  && apt-get -f install \
  && apt-get autoclean \
  && rm -rf /requirements.txt /tmp/* /var/tmp/* /var/lib/apt/lists/*
+ RUN pip install --no-cache-dir jellyfin-apiclient-python
  COPY . /
 VOLUME /config
 ENTRYPOINT ["/tini", "-s", "python3", "kometa.py", "--"]
